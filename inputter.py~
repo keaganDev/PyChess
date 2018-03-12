@@ -1,0 +1,60 @@
+''' inputter.py - input wrapper (called inputter because input is a builtin 
+name)
+'''
+
+# This may be a little wierd considering that pygame has a similar interface
+# already, but the docs reccommend processing the events using 
+# pygame.event.get() so as to capture all input events - so this input wrapper
+# is set and reset according the main loop of my game so I can be sure I am 
+# gathering all the input I possibly can
+
+
+from types import SimpleNamespace
+
+import pygame
+
+# used for type annotations
+Event = type(pygame.event)
+
+# creating a li'l namespace so that we don't have a bunch
+# of global variables (and don't have boilerplate class code
+# that we don't need)
+
+_input_namespace = SimpleNamespace(
+    mouse_position=None,
+)
+
+
+def _set_mouse_pos(mouse_pos: (int, int)):
+    _input_namespace.mouse_position = mouse_pos
+
+
+def get_mouse_pos() -> (int, int):
+    return _input_namespace.mouse_position
+
+
+def handle_mouse_input(e: Event):
+    ''' handle all mouse related events '''
+    
+    # for any of these three events a pos attribute is available 
+    # on the event
+
+    if e.type == pygame.MOUSEMOTION:
+        _set_mouse_pos(e.pos)
+        handled = True
+
+
+def is_mouse_event(e: Event):
+    ''' return true is e.type is one of the three mouse events '''
+    return e.type == pygame.MOUSEMOTION or e.type == pygame.MOUSEBUTTONDOWN \
+        or e.type == pygame.MOUSEBUTTONUP
+
+
+def handle_event(e: Event):
+    ''' handle the specified event '''
+
+    # TODO(Keagan): Right now this solution is sub par, but at least for
+    # now, we stop trying to handle events after an event has been handled
+
+    if is_mouse_event(e): 
+        handle_mouse_input(e)

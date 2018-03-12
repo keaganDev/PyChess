@@ -1,0 +1,309 @@
+''' 
+board.py - drawing different aspects of the game 
+author: Keagan Roos
+'''
+
+from pygame import Rect, Surface, draw
+
+import main
+import inputter
+from coords import *
+
+import board_data
+
+#=============================================================================
+# Board modelling classes
+#=============================================================================
+
+# Need to wait for Python 3.7 data classes 
+
+# @dataclass
+# class PiecData:
+#    ''' represents all data associated with a piece '''
+#    rect: Rect
+#    tile: TileData
+#    team_id: int
+    
+# @dataclass
+# class TileData:
+#    ''' represents all data associated with a tile '''
+#    rect: Rect
+#    rank: int = 0
+#    row: int = 0
+#    piece: PieceData
+
+# @dataclass
+# class BoardData:
+#     ''' The new and improved data class for the board '''
+#     rect: Rect
+#
+#     NUM_TILES_PER: int = 8
+#    
+#     tiles : list # of type: TileData
+#     pieces: list # of type: PieceData
+    
+#     hovered_tile  :  TileData
+#     selected_tile :  TileData
+#     selected_piece: PieceData
+
+# _board_data = BoardData()
+
+
+class BoardData():
+    ''' keep track of all data regarding the board '''
+    BOARD_SIZE = 0.75 # in screen coords
+    NUM_TILES_PER = 8
+
+    #---------------------------------------------------------------------------
+
+    def __init__(self):
+        self.rect   = self._calc_board_rect()
+        self.tiles  = self._calc_tiles()
+        self.pieces = self._calc_pieces()
+        self.hovered_tile   = None 
+        self.selected_piece = None
+        self.players = (PlayerData(0), PlayerData(1))
+        # the player who's turn it currently is
+        self.active_player = players[0]
+
+    #---------------------------------------------------------------------------
+
+    def _calc_board_rect() -> Rect:
+        ''' calculate a board rect and return it '''
+        # We calculate the board Rect using these kindof normalized coords
+        # so we can set the board to a percentage of the screen. Everything
+        # else like tiles and pieces we don't have to do this with, but its
+        # probably a good idea to keep things consistent
+        s_size = main.App.screen_size
+        rect_left = 0.5 - self.BOARD_SIZE / 2
+        rect_top  = 0.5 - self.BOARD_SIZE / 2
+        top, left = screen_coord_to_pixel(s_size, (rect_left, rect_top))
+        width, height \
+            = screen_coord_to_pixel(s_size, (self..BOARD_SIZE, self..BOARD_SIZE))
+        # this final Rect is the board rect
+        return Rect(top, left, width, height)
+
+        
+
+_board_data = BoardData()
+
+class BoardViewInfo():
+    ''' 
+    Visual info about how to render the board (frontend info about 
+    board)
+    '''
+    # in screen coords
+    BOARD_SIZE = 0.75  
+
+    # TODO(Keagan): Remember to remove this
+    NUM_TILES_PER_ROW_RANK = 8
+
+    COLOR_TILE_DARK = (10, 10, 10)
+    COLOR_TILE_LIGHT = (160, 160, 160)
+    
+    def __init__(self):
+        self.initialized = False
+        self.board_rect = None
+        self.tile_rects = None
+        self.piecerects = None
+        self.tile_size = None
+
+
+# the following object is not much more than c-style structs 
+# (functionally) therefore it is postfixed with info, is has
+# no attached behaviour really, only hold values.
+
+# board view info 
+_bvi = BoardViewInfo()
+
+#=============================================================================
+# Init Functions
+#=============================================================================
+
+def initialize():
+    ''' initialize the board data '''
+    board_data.initialize()
+    board_data.debug_board()
+    # Test get_tile_at function
+    if __debug__:
+        tile = board_data.get_tile_at(0, 0)
+        assert tile.row is 0 and tile.rank is 0
+        tile = board_data.get_tile_at(7, 7)
+        assert tile.row is 7 and tile.rank is 7
+
+#-----------------------------------------------------------------------------
+
+def _calculate_board_rect(s: Surface, s_size: (int, int)) -> Rect:   
+    ''' calculate the values of the _board_rect '''
+    # calculate the size of the board relative to the size of the screen
+    # instead of a fixed number of pixels
+    rect_left = 0.5 - _bvi.BOARD_SIZE / 2
+    rect_top = 0.5 - _bvi.BOARD_SIZE  / 2
+    top, left = screen_coord_to_pixel(s_size, (rect_left, rect_top))
+    width, height \
+        = screen_coord_to_pixel(s_size, (_bvi.BOARD_SIZE, _bvi.BOARD_SIZE))
+    # this final Rect is the board rect
+    return Rect(top, left, width, height)
+
+#-----------------------------------------------------------------------------
+
+def _calculate_tile_rects() -> []:
+    ''' calculate the rects of all the tiles '''
+    # check if the board is initialized, the tiles depend on it
+    assert _bvi.board_rect, "The board rect must be initialized" \
+        " before attempting to initialize the tiles!"
+    _bvi.tile_size = _bvi.board_rect.width / _bvi.NUM_TILES_PER_ROW_RANK
+    # TODO(Keagan):
+    # if you think this list comprehension is a mess then you are welcome to 
+    # clean it up. Personally I (Keagan) think one nested loop is fine, but I
+    # understand the construction of the tile_rects being four lines is a
+    # might be hard to read.
+    tile_rects = [Rect(
+            row * _bvi.tile_size + _bvi.board_rect.left, 
+            rank * _bvi.tile_size + _bvi.board_rect.top, 
+            _bvi.tile_size, _bvi.tile_size) 
+        for row in range(0, _bvi.NUM_TILES_PER_ROW_RANK) 
+            for rank in range(0, _bvi.NUM_TILES_PER_ROW_RANK)]
+    return tile_rects
+
+#-----------------------------------------------------------------------------
+
+def recalculate_board():
+    ''' 
+    Call this when the board needs to be recalculated i.e: screen 
+    resized
+    ''' 
+    bvi.initialized = False
+
+#=============================================================================
+# Update functions
+#=============================================================================
+
+def _mouse_pos_to_tile_index(mouse_pos: (int, int)) -> int:
+    ''' 
+    Takes a mouse position in pixel coordinates and converts it to an 
+    index in the board (returns an index of -1 if mouse is outside of board)
+    '''
+    if not _bvi.board_rect or mouse_pos[0] < _bvi.board_rect.left or \
+        mouse_pos[1] < _bvi.board_rect.top or \
+        mouse_pos[0] >= _bvi.board_rect.left + _bvi.board_rect.width or \
+        mouse_pos[1] >= _bvi.board_rect.top + _bvi.board_rect.height:
+        # the mouse cursor is not inside the board
+        return -1
+    rank = (mouse_pos[0] - _bvi.board_rect.left) // _bvi.tile_size
+    row  = (mouse_pos[1] - _bvi.board_rect.top)  // _bvi.tile_size
+    mouse_index_in_board = row * _bvi.NUM_TILES_PER_ROW_RANK + rank
+    assert mouse_index_in_board < 64
+    return int(mouse_index_in_board)
+
+#-----------------------------------------------------------------------------
+
+def update():
+    ''' 
+    update board based on any player input or game logic 
+    '''
+    # Begin Update Mouse Hover Code
+    mouse_pos = inputter.get_mouse_pos()
+    mouse_index_in_board = _mouse_pos_to_tile_index(mouse_pos)
+    if mouse_index_in_board != -1:
+        tile_under_mouse = board_data.get_tile_at_index(mouse_index_in_board)
+        board_data.set_hovered_tile(tile_under_mouse)
+    else:
+        board_data.set_hovered_tile(None)
+    # End Update Mouse Hover Code
+
+    
+    # Begin Update Left Mouse Click Code
+    #
+    # TODO(Keagan): Implement the following pseudocode
+    #
+    # When the user clicks the left mouse button based on the state of the
+    # the game the following should happen:
+    #
+    # if there is no currently selected piece
+    #   if the tile under which the mouse was clicked contains a piece
+    #       set the piece under that tile to currently selected
+    # else 
+    #   if there is a valid move position on the clicked tile
+    #     initiate move of selected piece to clicked tile
+    #   else if there is a selectable piece under the tile
+    #       set that piece as the new selectable piece
+    # 
+    # End Update Left Mouse Click Code
+
+#=============================================================================
+# Render functions
+#=============================================================================
+
+def _render_board(s: Surface):
+    '''
+    Draws the background elements of the board
+    '''
+    # by the time we call _do_the_rendering, no matter what, the _board_rect
+    # and _tile_rects should be initialized
+    assert _bvi.initialized and _bvi.board_rect and _bvi.tile_rects
+    draw.rect(s, (20, 20, 20), _bvi.board_rect)
+    for i, tile_rect in enumerate(_bvi.tile_rects):
+        rank = i // _bvi.NUM_TILES_PER_ROW_RANK
+        row  = i % _bvi.NUM_TILES_PER_ROW_RANK
+        tile_color = None
+        if not row % 2 and not rank % 2 or \
+            row % 2 and rank % 2:
+            tile_color = _bvi.COLOR_TILE_LIGHT
+        else:
+            tile_color = _bvi.COLOR_TILE_DARK
+        draw.rect(s, tile_color, tile_rect)
+
+#-----------------------------------------------------------------------------
+
+def _render_selections(s: Surface):
+    ''' 
+    render selection related items such as hovered tile or selected piece 
+    '''
+    hovered_tile = board_data.get_hovered_tile()
+    if hovered_tile:
+        index = hovered_tile.row * _bvi.NUM_TILES_PER_ROW_RANK \
+            + hovered_tile.rank
+        draw.rect(s, (0, 255, 0), _bvi.tile_rects[index], 3)
+
+#-----------------------------------------------------------------------------
+
+def _render_pieces(s: Surface):
+    ''' 
+    render the pieces according to the board data 
+    '''
+    pieces = board_data.get_pieces()
+    PIECE_MARGIN_IN_TILE = 10 # pixels 
+    for p in pieces:
+        # TODO(Keagan): Check that the margin calculation actually
+        # makes sense. 
+        piece_rect = Rect(
+            _bvi.board_rect.top + (p.actualpos[0] * _bvi.tile_size) \
+            + PIECE_MARGIN_IN_TILE // 2, 
+            _bvi.board_rect.left + (p.actualpos[1] * _bvi.tile_size) \
+            + PIECE_MARGIN_IN_TILE // 2,
+            _bvi.tile_size - PIECE_MARGIN_IN_TILE,
+            _bvi.tile_size - PIECE_MARGIN_IN_TILE 
+        )
+        piece_color = (255, 0, 0)
+        draw.rect(s, piece_color, piece_rect)
+
+#-----------------------------------------------------------------------------
+
+def render(s: Surface, s_size: (int, int)):
+    ''' render the game board '''
+    if not _bvi.initialized:
+        _bvi.board_rect = _calculate_board_rect(s, s_size)
+        _bvi.tile_rects = _calculate_tile_rects()
+        _bvi.initialized = True
+    # first render the background
+    _render_board(s)
+    # render selections like hovered tiles or the tile
+    # with the selected piece
+    _render_selections(s)
+    # then render the chess pieces
+    _render_pieces(s)
+
+#-----------------------------------------------------------------------------
+
+
